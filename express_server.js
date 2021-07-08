@@ -26,6 +26,13 @@ app.use(morgan('dev'));
 // set the view enging to ejs
 app.set('view engine', 'ejs');
 
+app.get("/urls", (req, res) => {
+  // res.json(urlDatabase);
+  const templateVars = { urls: urlDatabase };
+  res.render('urls_index', templateVars);
+});
+
+/*
 // add endpoints (VERB + PATH)
 // .get has two args, string and cb, which is path and action
 app.get("/", (req, res) => {
@@ -46,10 +53,6 @@ app.get("/", (req, res) => {
 
 app.get('/about', (req, res) => {
   res.render('pages/about');
-});
-/*
-app.get("/urls.json", (req, res) => {
-  res.json(urlDatabase);
 });
 
 app.get("/hello", (req, res) => {
