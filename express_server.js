@@ -7,21 +7,8 @@ const urlDatabase = {
   "b2xVn2": "http://www.lighthouselabs.ca",
   "9sm5xK": "http://www.google.com"
 };
-/*
-// all middleware uses .use that takes in req, res, and next
-app.use((req, res, next) => {
-  //  body parser
-  // "username=raph&password=1234"
-  req.body = {
-    username: 'raph',
-    password: '1234'
-  };
-  // res.send('stopped by the middleware');
-  next();
-});
-// used to parse certain data and show in terminal
+
 app.use(morgan('dev'));
-*/
 
 // set the view enging to ejs
 app.set('view engine', 'ejs');
@@ -31,6 +18,18 @@ app.get("/urls", (req, res) => {
   const templateVars = { urls: urlDatabase };
   res.render('urls_index', templateVars);
 });
+
+app.get("/urls/new", (req, res) => {
+  res.render("urls_new");
+});
+
+app.get("/urls/:shortURL", (req, res) => {
+  const longURL = urlDatabase[req.params.shortURL].longURL;
+  const templateVars = { shortURL: req.params.shortURL, longURL: longURL };
+  res.render("urls_show", templateVars);
+});
+
+
 
 /*
 // add endpoints (VERB + PATH)
