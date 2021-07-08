@@ -1,11 +1,13 @@
-const express = require("express");
+const express = require('express');
 const app = express(); // creates application with express function
 const morgan = require('morgan'); // this npm package gives relevant info in terminal
 const PORT = 8080; // default port 8080
-const bodyParser = require("body-parser");
-app.use(bodyParser.urlencoded({extended: true}));
-// data in the input field will be available in the req.body.longURL variable
-// which we can store in our urlDatabase object
+const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
+app.use(express.urlencoded({ extended: false }));
+app.use(morgan('dev'));
+app.use(cookieParser());
+app.set('view engine', 'ejs');
 
 function generateRandomString() {
  let result = "";
@@ -17,79 +19,73 @@ function generateRandomString() {
  return result;
 };
 
+// in-memory database
 const urlDatabase = {
-  "b2xVn2": "http://www.lighthouselabs.ca",
-  "9sm5xK": "http://www.google.com"
+  "b2xVn2": { longURL: "http://www.lighthouselabs.ca" },
+  "9sm5xK": { longURL: "http://www.google.com" }
 };
+// Add POST /login -> Login with a username
+app.post("/login", (req, res) => {
+  // should set a cookie named username to the value submitted in the request body via the login form
+  res.cookie("username", req.body.username);
+  res.redirect('/urls');
+});
 
+app.post("/logout", (req, res) => {
+  res.clearCookie("username");
+  res.redirect('/urls');
+});
+
+// Add POST /urls -> Create a shortURL for a longURL input
 app.post("/urls", (req, res) => {
-  console.log(req.body);  // Log the POST request body to the console
+  console.log(req.body);
   const shortURL = generateRandomString();
   urlDatabase[shortURL] = { longURL: req.body.longURL };
-  // res.send("Ok"); // Respond with 'Ok' (we will replace this)
   res.redirect(`urls/${shortURL}`);
 });
 
+// Delete POST /urls/:shortURL/delete -> Remove the shortURL property from the urls
 app.post("/urls/:shortURL/delete", (req, res) => {
   const shortURL = req.params.shortURL;
   delete urlDatabase[shortURL];
   res.redirect('/urls');
 });
 
-app.use(morgan('dev'));
+// Edit POST /urls/:shortURL -> Assigns current longURL to a newLongURL
+app.post("/urls/:shortURL", (req, res) => {
+  const shortURL = req.params.shortURL;
+  urlDatabase[shortURL].longURL = req.body.newLongURL;
+  res.redirect('/urls');
+});
 
-// set the view enging to ejs
-app.set('view engine', 'ejs');
-
+// Browse GET /urls
 app.get("/urls", (req, res) => {
-  const templateVars = { urls: urlDatabase };
+  const templateVars = {
+    urls: urlDatabase,
+    username: req.cookies["username"]
+  };
   res.render('urls_index', templateVars);
 });
 
+// Read GET /urls/new -> Shows new url
 app.get("/urls/new", (req, res) => {
   res.render("urls_new");
 });
 
+// Read GET /u/:shortURL -> Each short url when clicked, goes to the longURL's page
 app.get("/u/:shortURL", (req, res) => {
   const longURL = urlDatabase[req.params.shortURL].longURL;
   res.redirect(longURL);
 });
 
+// Read GET /urls/:shortURL -> Clicking on a shortURL on urls page displays it with its longURL on a new page
 app.get("/urls/:shortURL", (req, res) => {
+  const shortURL = req.params.shortURL;
   const longURL = urlDatabase[req.params.shortURL].longURL;
-  const templateVars = { shortURL: req.params.shortURL, longURL: longURL };
+  const templateVars = { shortURL: shortURL, longURL: longURL };
   res.render("urls_show", templateVars);
 });
 
-
-
-/*
-// add endpoints (VERB + PATH)
-// .get has two args, string and cb, which is path and action
-app.get("/", (req, res) => {
-  // .send acts as .write and .end in one package
-  // res.send("Hello!");
-  let mascots = [
-    { name: 'Sammy', organization: "DigitalOcean", birth_year: 2012},
-    { name: 'Tux', organization: "Linux", birth_year: 1996},
-    { name: 'Moby Dock', organization: "Docker", birth_year: 2013}
-  ];
-  let tagline = "No programming concept is complete without a cute animal mascot.";
-
-  res.render('pages/index', {
-    mascots: mascots,
-    tagline: tagline
-  });
-});
-
-app.get('/about', (req, res) => {
-  res.render('pages/about');
-});
-
-app.get("/hello", (req, res) => {
-  res.send("<html><body>Hello <b>World</b></body></html>\n");
-});
-*/
 // tell our app to listen on a port
 app.listen(PORT, () => {
   console.log(`Example app listening on port ${PORT}!`);
