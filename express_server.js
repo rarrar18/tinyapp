@@ -1,6 +1,7 @@
 const express = require('express');
 const app = express(); // creates application with express function
-const morgan = require('morgan'); // this npm package gives relevant info in terminal
+const morgan = require('morgan'); // gives relevant info in terminal
+const bcrypt = require('bcrypt'); // used to hash passwords
 const PORT = 8080; // default port 8080
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
@@ -19,26 +20,43 @@ function generateRandomString() {
  }
  return result;
 };
+// returns a new object that is the logged in user's own urlDatabase
+function getUserURLs(userId) {
+  let userURLs = {};
+  // loop through urlDatabase
+  for (const url in urlDatabase) {
+    // find all urls associated with userId
+    // console.log('url: ', url);
+    // console.log('urlDatabase: ',urlDatabase);
+    let obj = urlDatabase[url];
+    if (obj.userId === userId) {
+      // userURLs = obj;
+      userURLs[url] = obj;
+      // return a new urlDatabase that has the keys filtered out
+    }
+  }
+  return userURLs;
+};
 
 // in-memory database to hold urls
 const urlDatabase = {
-  "b2xVn2": { longURL: "http://www.lighthouselabs.ca" },
-  "9sm5xK": { longURL: "http://www.google.com" }
+  "b2xVn2": { longURL: "http://www.lighthouselabs.ca", userId: "one" },
+  "9sm5xK": { longURL: "http://www.google.com", userId: "one" }
 };
 
 // in-memory database to hold users
 const users = { 
-  "userRandomID": {
-    id: "userRandomID", 
-    email: "user@example.com", 
-    password: "purple-monkey-dinosaur"
+  "one": {
+    id: "one",
+    email: "1@1.com", 
+    password: bcrypt.hashSync("1", 10)
   },
- "user2RandomID": {
-    id: "user2RandomID", 
-    email: "user2@example.com", 
-    password: "dishwasher-funk"
+ "two": {
+    id: "two", 
+    email: "2@2.com", 
+    password: bcrypt.hashSync("2", 10)
   }
-}
+};
 
 const getUserByEmail = function(email) {
   const userArr = Object.values(users);
@@ -61,20 +79,24 @@ app.post("/register", (req, res) => {
     return res.status(400).send("That email has already been used!")
   }
   const id = generateRandomString();
-  const user = { id, email, password };
-  users[id] = user;
+  const hash = bcrypt.hashSync(password, 10);
+  
+      const user = {
+        id: id,
+        email: email,
+        password: hash
+      };
+      users[id] = user;
+ 
   res.cookie("user_id", id);
-  console.log(users);
-  console.log(user);
   res.redirect('/urls');
 });
 
 // Add POST /login -> Login with a username in the text input
 app.post("/login", (req, res) => {
-  // should set a cookie named username to the value submitted in the request body via the login form
-  // res.cookie("username", req.body.username);
   const email = req.body.email;
   const password = req.body.password;
+  const hash = bcrypt.hashSync(password, 10);
   if (!email || !password ) {
     return res.status(400).send("Empty email or password!")
   }
@@ -82,10 +104,12 @@ app.post("/login", (req, res) => {
   if (!user) {
     return res.status(403).send("User email cannot be found!")
   }
-  if (user.password !== password) {
+  if (!(bcrypt.compareSync(password, user.password))) {
+    console.log('user pw', user.password);
+    console.log('pw: ', password);
+    console.log('hash: ', hash);
     return res.status(403).send("Password does not match!")
   }
-  
   res.cookie("user_id", user.id);
   res.redirect('/urls');
 });
@@ -98,9 +122,8 @@ app.post("/logout", (req, res) => {
 
 // Add POST /urls -> Create a shortURL for a longURL input
 app.post("/urls", (req, res) => {
-  console.log(req.body);
   const shortURL = generateRandomString();
-  urlDatabase[shortURL] = { longURL: req.body.longURL };
+  urlDatabase[shortURL] = { longURL: req.body.longURL, userId: req.cookies["user_id"] };
   res.redirect(`urls/${shortURL}`);
 });
 
@@ -130,19 +153,25 @@ app.get("/login", (req, res) => {
 
 // Browse GET /urls
 app.get("/urls", (req, res) => {
-
-  const id = req.cookies["user_id"];
-  const user = users[id];
-
-  const templateVars = { urls: urlDatabase, user };
+  const user = req.cookies["user_id"];
+  console.log('This is the user: ', user);
+  console.log('User Database:', users[user]);
+  let urlDatabase = getUserURLs(user);
+  const templateVars = { urls: urlDatabase, user: users[user] };
   res.render('urls_index', templateVars);
 });
 
 // Read GET /urls/new -> Shows new url
 app.get("/urls/new", (req, res) => {
-  const id = req.cookies["user_id"];
-  const user = users[id];
-  res.render("urls_new", { user });
+  // const user = users["userId"];
+  const templateVars = {
+    urls: urlDatabase,
+    user: users[req.cookies.user_id]
+  }
+  if (!templateVars.user) {
+    res.redirect('/login');
+  }
+  res.render("urls_new", templateVars);
 });
 
 // Read GET /u/:shortURL -> Each short url when clicked, goes to the longURL's page
@@ -155,9 +184,8 @@ app.get("/u/:shortURL", (req, res) => {
 app.get("/urls/:shortURL", (req, res) => {
   const shortURL = req.params.shortURL;
   const longURL = urlDatabase[req.params.shortURL].longURL;
-  const id = req.cookies["user_id"];
-  const user = users[id];
-  const templateVars = { shortURL: shortURL, longURL: longURL, user };
+  const user = req.cookies["user_id"];
+  const templateVars = { shortURL: shortURL, longURL: longURL, user: users[user] };
   res.render("urls_show", templateVars);
 });
 
