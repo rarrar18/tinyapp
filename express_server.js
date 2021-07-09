@@ -11,6 +11,15 @@ app.use(morgan('dev'));
 app.use(cookieParser());
 app.set('view engine', 'ejs');
 
+function hashPassword(password) {
+  bcrypt.genSalt(10, (err, salt) => {
+    console.log('salt: ', salt);
+    bcrypt.hash(password, salt, (err, hash) => {
+      console.log('hash: ', hash);
+    });
+  });
+}
+
 function generateRandomString() {
  let result = "";
  const inputChars = "Aa1BbCc2DdEe3FfGg4HhIi5JjKk6LlMm7NnOo8PpQq9RrSs0TyUuVvWeXcYyZz";
@@ -26,15 +35,12 @@ function getUserURLs(userId) {
   // loop through urlDatabase
   for (const url in urlDatabase) {
     // find all urls associated with userId
-    // console.log('url: ', url);
-    // console.log('urlDatabase: ',urlDatabase);
     let obj = urlDatabase[url];
     if (obj.userId === userId) {
-      // userURLs = obj;
       userURLs[url] = obj;
-      // return a new urlDatabase that has the keys filtered out
     }
   }
+  // return new urlDatabase that has the keys filtered out
   return userURLs;
 };
 
@@ -49,12 +55,12 @@ const users = {
   "one": {
     id: "one",
     email: "1@1.com", 
-    password: bcrypt.hashSync("1", 10)
+    password: hashPassword("1")
   },
  "two": {
     id: "two", 
     email: "2@2.com", 
-    password: bcrypt.hashSync("2", 10)
+    password: hashPassword("2")
   }
 };
 
@@ -79,7 +85,8 @@ app.post("/register", (req, res) => {
     return res.status(400).send("That email has already been used!")
   }
   const id = generateRandomString();
-  const hash = bcrypt.hashSync(password, 10);
+  const hash = hashPassword(password);
+  // const hash = bcrypt.hashSync(password, 10);
   
       const user = {
         id: id,
@@ -96,7 +103,8 @@ app.post("/register", (req, res) => {
 app.post("/login", (req, res) => {
   const email = req.body.email;
   const password = req.body.password;
-  const hash = bcrypt.hashSync(password, 10);
+  const hash = hashPassword(password);
+  // const hash = bcrypt.hashSync(password, 10);
   if (!email || !password ) {
     return res.status(400).send("Empty email or password!")
   }
@@ -104,7 +112,7 @@ app.post("/login", (req, res) => {
   if (!user) {
     return res.status(403).send("User email cannot be found!")
   }
-  if (!(bcrypt.compareSync(password, user.password))) {
+  if (!(bcrypt.compare(password, user.password))) {
     console.log('user pw', user.password);
     console.log('pw: ', password);
     console.log('hash: ', hash);
