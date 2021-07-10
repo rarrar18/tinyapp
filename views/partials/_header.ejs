@@ -12,10 +12,12 @@
           <a class="nav-item nav-link" href="/register">Register</a>
           <a class="nav-item nav-link" href="/login">Login</a>
         <% } else { %>
+          <div class="nav-item">
+            <a class="nav-item nav-link">Logged in as <%= user.email %></a>
+          </div>
           <form method="POST" action="/logout">
             <button type="submit" class="btn btn-primary" value="Logout">Logout</button>
           </form>
-          <p class="nav-item">Logged in as <%= user.email %></p>
         <% } %>
       </div>
     </div>

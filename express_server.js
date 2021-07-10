@@ -1,101 +1,65 @@
 const express = require('express');
-const app = express(); // creates application with express function
-const morgan = require('morgan'); // gives relevant info in terminal
-const bcrypt = require('bcrypt'); // used to hash passwords
-const PORT = 8080; // default port 8080
-const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser');
+const morgan = require('morgan');
+const bcrypt = require('bcrypt');
+const cookieSession = require('cookie-session');
+const helpers = require('./helpers');
+
+const app = express();
+const PORT = 8080;
+
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static('public'));
 app.use(morgan('dev'));
-app.use(cookieParser());
+app.use(cookieSession({
+  name: 'cookie',
+  keys: ['key1', 'key2']
+}));
 app.set('view engine', 'ejs');
 
-function hashPassword(password) {
-  bcrypt.genSalt(10, (err, salt) => {
-    console.log('salt: ', salt);
-    bcrypt.hash(password, salt, (err, hash) => {
-      console.log('hash: ', hash);
-    });
-  });
-}
-
-function generateRandomString() {
- let result = "";
- const inputChars = "Aa1BbCc2DdEe3FfGg4HhIi5JjKk6LlMm7NnOo8PpQq9RrSs0TyUuVvWeXcYyZz";
- const charStrLen = inputChars.length;
- for (i = 0; i < 6; i = i + 1) {
-   result += inputChars.charAt(Math.floor(Math.random() * charStrLen));
- }
- return result;
-};
-// returns a new object that is the logged in user's own urlDatabase
-function getUserURLs(userId) {
-  let userURLs = {};
-  // loop through urlDatabase
-  for (const url in urlDatabase) {
-    // find all urls associated with userId
-    let obj = urlDatabase[url];
-    if (obj.userId === userId) {
-      userURLs[url] = obj;
-    }
-  }
-  // return new urlDatabase that has the keys filtered out
-  return userURLs;
-};
-
-// in-memory database to hold urls
+// in-memory database to hold registered urls
 const urlDatabase = {
   "b2xVn2": { longURL: "http://www.lighthouselabs.ca", userId: "one" },
   "9sm5xK": { longURL: "http://www.google.com", userId: "one" }
 };
 
-// in-memory database to hold users
-const users = { 
+// in-memory database to hold registered users
+const users = {
   "one": {
     id: "one",
-    email: "1@1.com", 
-    password: hashPassword("1")
+    email: "1@1.com",
+    password: bcrypt.hashSync("1", 10)
   },
- "two": {
-    id: "two", 
-    email: "2@2.com", 
-    password: hashPassword("2")
+  "two": {
+    id: "two",
+    email: "2@2.com",
+    password: bcrypt.hashSync("2", 10)
   }
-};
-
-const getUserByEmail = function(email) {
-  const userArr = Object.values(users);
-  for (const user of userArr) {
-    if (user.email === email) {
-      return user;
-    }
-  }
-  return null;
 };
 
 // Add POST /register -> Adds new user object to global users object
 app.post("/register", (req, res) => {
   const email = req.body.email;
   const password = req.body.password;
-  if (!email || !password ) {
-    return res.status(400).send("Empty email or password!")
+  if (!email || !password) {
+    return res.status(400).send("Empty email or password!");
   }
-  if (getUserByEmail(email)) {
-    return res.status(400).send("That email has already been used!")
+  // find out if email is already registered
+  const user = helpers.getUserByEmail(email, users);
+  if (user) {
+    return res.status(400).send("That email has already been used!");
   }
-  const id = generateRandomString();
-  const hash = hashPassword(password);
-  // const hash = bcrypt.hashSync(password, 10);
-  
-      const user = {
-        id: id,
-        email: email,
-        password: hash
-      };
-      users[id] = user;
- 
-  res.cookie("user_id", id);
+  // add the new user to our users object
+  const id = helpers.generateRandomString();
+  // hash the user's password
+  const hash = bcrypt.hashSync(password, 10);
+  // assign values to the new user object
+  users[id] = {
+    id,
+    email,
+    password: hash
+  };
+  console.log('users: ', users);
+  req.session["user_id"] = id;
   res.redirect('/urls');
 });
 
@@ -103,39 +67,42 @@ app.post("/register", (req, res) => {
 app.post("/login", (req, res) => {
   const email = req.body.email;
   const password = req.body.password;
-  const hash = hashPassword(password);
-  // const hash = bcrypt.hashSync(password, 10);
-  if (!email || !password ) {
-    return res.status(400).send("Empty email or password!")
+  // check if there is an email and password in the login inputs
+  if (!email || !password) {
+    return res.status(400).send("Empty email or password!");
   }
-  const user = getUserByEmail(email);
+  // find the user based on email
+  const user = helpers.getUserByEmail(email, users);
+  // check if there is a registered email
   if (!user) {
-    return res.status(403).send("User email cannot be found!")
+    return res.status(403).send("User email cannot be found!");
   }
-  if (!(bcrypt.compare(password, user.password))) {
-    console.log('user pw', user.password);
-    console.log('pw: ', password);
-    console.log('hash: ', hash);
-    return res.status(403).send("Password does not match!")
-  }
-  res.cookie("user_id", user.id);
-  res.redirect('/urls');
+  // compare the input password with the user's password
+  bcrypt.compare(password, user.password, (err, result) => {
+    if (!result) {
+      return res.status(403).send("Password does not match!");
+    }
+    // if there is a match, login as user and show their urls
+    req.session["user_id"] = user.id;
+    res.redirect('/urls');
+  });
 });
 
-// Add POST /logout -> Clear user_id once logged out
+// Add POST /logout -> Clear user_id cookie once logged out
 app.post("/logout", (req, res) => {
-  res.clearCookie("user_id");
+  req.session = null;
   res.redirect('/urls');
 });
 
 // Add POST /urls -> Create a shortURL for a longURL input
 app.post("/urls", (req, res) => {
-  const shortURL = generateRandomString();
-  urlDatabase[shortURL] = { longURL: req.body.longURL, userId: req.cookies["user_id"] };
+  const shortURL = helpers.generateRandomString();
+  // assign each new shortURL its matching longURL and userId in the urlDatabase
+  urlDatabase[shortURL] = { longURL: req.body.longURL, userId: req.session["user_id"] };
   res.redirect(`urls/${shortURL}`);
 });
 
-// Delete POST /urls/:shortURL/delete -> Remove the shortURL property from the urls
+// Delete POST /urls/:shortURL/delete -> Remove the shortURL property from the urlDatabase
 app.post("/urls/:shortURL/delete", (req, res) => {
   const shortURL = req.params.shortURL;
   delete urlDatabase[shortURL];
@@ -159,24 +126,25 @@ app.get("/login", (req, res) => {
   res.render("login", { user: null });
 });
 
-// Browse GET /urls
+// Browse GET /urls -> Show the matching user their own urlDatabase
 app.get("/urls", (req, res) => {
-  const user = req.cookies["user_id"];
-  console.log('This is the user: ', user);
-  console.log('User Database:', users[user]);
-  let urlDatabase = getUserURLs(user);
-  const templateVars = { urls: urlDatabase, user: users[user] };
+  // current user should have cookies while logged in
+  const user = req.session["user_id"];
+  // find the logged in user's urls by matchig userId to urls
+  let userURLs = helpers.getUserURLs(user, urlDatabase);
+  // output the user's personal url database and userId
+  const templateVars = { urls: userURLs, user: users[user] };
   res.render('urls_index', templateVars);
 });
 
-// Read GET /urls/new -> Shows new url
+// Read GET /urls/new -> Shows page for creating new url
 app.get("/urls/new", (req, res) => {
-  // const user = users["userId"];
-  const templateVars = {
-    urls: urlDatabase,
-    user: users[req.cookies.user_id]
-  }
+  // current user should have cookies while logged in
+  const user = req.session["user_id"];
+  const templateVars = { urls: urlDatabase, user: users[user] };
+  // checks if user is logged in
   if (!templateVars.user) {
+    // if not, send user to login page
     res.redirect('/login');
   }
   res.render("urls_new", templateVars);
@@ -188,11 +156,11 @@ app.get("/u/:shortURL", (req, res) => {
   res.redirect(longURL);
 });
 
-// Read GET /urls/:shortURL -> Clicking on a shortURL on urls page displays it with its longURL on a new page
+// Read GET /urls/:shortURL -> Clicking on shortURL on urls page displays it with its longURL on new page
 app.get("/urls/:shortURL", (req, res) => {
   const shortURL = req.params.shortURL;
   const longURL = urlDatabase[req.params.shortURL].longURL;
-  const user = req.cookies["user_id"];
+  const user = req.session["user_id"];
   const templateVars = { shortURL: shortURL, longURL: longURL, user: users[user] };
   res.render("urls_show", templateVars);
 });
