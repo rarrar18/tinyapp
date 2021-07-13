@@ -126,6 +126,11 @@ app.get("/login", (req, res) => {
   res.render("login", { user: null });
 });
 
+// Read GET / -> Shows login page when connected to localhost
+app.get("/", (req, res) => {
+  res.render("login", { user: null });
+});
+
 // Browse GET /urls -> Show the matching user their own urlDatabase
 app.get("/urls", (req, res) => {
   // current user should have cookies while logged in
