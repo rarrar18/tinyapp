@@ -126,9 +126,9 @@ app.get("/login", (req, res) => {
   res.render("login", { user: null });
 });
 
-// Read GET / -> Shows login page when connected to localhost
+// Read GET / -> Redirects to login when connected to localhost
 app.get("/", (req, res) => {
-  res.render("login", { user: null });
+  res.redirect('/login');
 });
 
 // Browse GET /urls -> Show the matching user their own urlDatabase
